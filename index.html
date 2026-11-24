@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RTKu Digital</title>
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#059669">
+    <meta name="application-name" content="RTKu Digital">
+    <meta name="apple-mobile-web-app-title" content="RTKu Digital">
+    <link rel="manifest" href="manifest.json">
+    <link id="apple-touch-icon-link" rel="apple-touch-icon" href="assets/icons/icon-192.png">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        };
+    </script>
+
+    <!-- 1. SCRIPT INSTAN TEMA (Mencegah Flash Putih) -->
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem('app_theme');
+            if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        })();
+    </script>
+
+    <!-- 2. ANIMASI RUNNING TEXT & RESPONSIVE FOOTER HP -->
+    <style>
+        @keyframes marquee-smooth {
+            0% {
+                transform: translate3d(var(--marquee-start, 600px), 0, 0);
+            }
+            100% {
+                transform: translate3d(var(--marquee-end, -600px), 0, 0);
+            }
+        }
+
+        .marquee-track {
+            display: inline-block;
+            white-space: nowrap;
+            will-change: transform;
+            animation-name: marquee-smooth;
+            animation-duration: var(--marquee-duration, 20s);
+            animation-timing-function: linear;
+            animation-iteration-count: infinite;
+        }
+
+        .marquee-track:hover {
+            animation-play-state: paused;
+        }
+
+        @media (max-width: 767px) {
+            #global-public-footer,
+            footer#global-public-footer {
+                display: none !important;
+            }
+        }
+    </style>
+
+    <!-- 3. SCRIPT INSTAN ANTI-KEDIP UNTUK PROFIL & FOTO -->
+    <script>
+        (function() {
+            function isSafeImageSrc(val) {
+                if (!val || val === "null" || val === "undefined") return false;
+                const trimmed = String(val).trim();
+                return (
+                    trimmed.startsWith("https://") ||
+                    trimmed.startsWith("http://") ||
+                    trimmed.startsWith("assets/") ||
+                    trimmed.startsWith("./") ||
+                    trimmed.startsWith("/") ||
+                    trimmed.startsWith("data:image/")
+                );
+            }
+
+            function getUserDisplayMeta() {
+                const savedAvatar = String(localStorage.getItem('user_avatar') || '').trim();
+                const rawName = String(localStorage.getItem('user_name') || localStorage.getItem('user_email') || 'User').trim();
+                const formattedName = rawName ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : 'User';
+                const email = String(localStorage.getItem('user_email') || '').trim();
+                const role = String(localStorage.getItem('user_role') || 'Warga').trim();
+                const parts = formattedName.split(/\s+/).filter(Boolean);
+                const fallbackInitial = String(
+                    localStorage.getItem('user_initial') ||
+                    (parts.length > 1 ? parts[0][0] + parts[1][0] : formattedName.slice(0, 2)) ||
+                    'IA'
+                ).toUpperCase();
+
+                return { savedAvatar, formattedName, email, role, fallbackInitial };
+            }
+
+            function applyAvatarToContainer(containerEl, avatarSrc, altText, fallbackInitial) {
+                if (!containerEl) return;
+                containerEl.textContent = fallbackInitial;
+
+                if (!isSafeImageSrc(avatarSrc)) return;
+
+                const img = document.createElement('img');
+                img.src = avatarSrc;
+                img.alt = altText || 'Profile';
+                img.referrerPolicy = 'no-referrer';
+                img.className = 'w-full h-full object-cover rounded-none';
+                img.onload = function() {
+                    containerEl.replaceChildren(img);
+                };
+                img.onerror = function() {
+                    containerEl.textContent = fallbackInitial;
+                };
+                if (img.complete && img.naturalWidth > 0) {
+                    containerEl.replaceChildren(img);
+                }
+            }
+
+            window.syncSidebarUserAvatar = function() {
+                const { savedAvatar, formattedName, email, role, fallbackInitial } = getUserDisplayMeta();
+
+                const elName = document.getElementById('user-name');
+                const elMobName = document.getElementById('mobile-dropdown-name');
+                const elEmail = document.getElementById('user-email');
+                const elMobEmail = document.getElementById('mobile-dropdown-email');
+                const elRole = document.getElementById('user-role');
+                const elInit = document.getElementById('user-initial');
+                const elMobAvatar = document.getElementById('mobile-user-avatar-img');
+
+                if (elName && localStorage.getItem('user_name')) elName.textContent = localStorage.getItem('user_name');
+                if (elMobName && localStorage.getItem('user_name')) elMobName.textContent = localStorage.getItem('user_name');
+                if (elEmail && email) elEmail.textContent = email;
+                if (elMobEmail && email) elMobEmail.textContent = email;
+                if (elRole && localStorage.getItem('user_role')) elRole.textContent = role;
+
+                applyAvatarToContainer(elInit, savedAvatar, formattedName, fallbackInitial);
+
+                if (elMobAvatar) {
+                    if (isSafeImageSrc(savedAvatar)) {
+                        elMobAvatar.referrerPolicy = 'no-referrer';
+                        elMobAvatar.onload = () => elMobAvatar.classList.remove('hidden');
+                        elMobAvatar.onerror = () => elMobAvatar.classList.add('hidden');
+                        elMobAvatar.src = savedAvatar;
+                        if (elMobAvatar.complete && elMobAvatar.naturalWidth > 0) {
+                            elMobAvatar.classList.remove('hidden');
+                        }
+                    } else {
+                        elMobAvatar.classList.add('hidden');
+                    }
+                }
+            };
+
+            window.syncGlobalPublicUserAvatar = function() {
+                const { savedAvatar, formattedName, email, role, fallbackInitial } = getUserDisplayMeta();
+
+                const pubBtn = document.getElementById('global-public-avatar-btn');
+                const pubImg = document.getElementById('global-public-avatar-img');
+                const pubInit = document.getElementById('global-public-avatar-initial');
+                const pubMenuName = document.getElementById('global-public-user-name');
+                const pubMenuSub = document.getElementById('global-public-user-sub');
+                const pubAdminLink = document.getElementById('global-public-admin-link');
+
+                if (pubBtn) pubBtn.title = email ? `${formattedName} (${email})` : formattedName;
+                if (pubMenuName) pubMenuName.textContent = formattedName;
+                if (pubMenuSub) pubMenuSub.textContent = email ? `${role} • ${email}` : role;
+                if (pubAdminLink) {
+                    pubAdminLink.classList.toggle('hidden', role.toLowerCase() !== 'administrator');
+                }
+                if (pubInit) pubInit.textContent = fallbackInitial.slice(0, 1);
+
+                if (pubImg && pubInit) {
+                    if (isSafeImageSrc(savedAvatar)) {
+                        pubImg.referrerPolicy = 'no-referrer';
+                        pubImg.onload = () => {
+                            pubImg.classList.remove('hidden');
+                            pubInit.classList.add('hidden');
+                        };
+                        pubImg.onerror = () => {
+                            pubImg.classList.add('hidden');
+                            pubInit.classList.remove('hidden');
+                        };
+                        pubImg.src = savedAvatar;
+                        pubImg.alt = formattedName;
+                        if (pubImg.complete && pubImg.naturalWidth > 0) {
+                            pubImg.classList.remove('hidden');
+                            pubInit.classList.add('hidden');
+                        }
+                    } else {
+                        pubImg.classList.add('hidden');
+                        pubInit.classList.remove('hidden');
+                    }
+                }
+
+                window.syncSidebarUserAvatar();
+            };
+
+            document.addEventListener('DOMContentLoaded', () => {
+                window.syncGlobalPublicUserAvatar();
+            });
+        })();
+    </script>
+
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body class="bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex h-screen min-h-0 overflow-hidden relative transition-colors duration-200">
+
+    <!-- BACKDROP MOBILE -->
+    <div id="sidebar-backdrop" class="fixed inset-0 bg-slate-900/50 dark:bg-slate-950/80 z-40 hidden md:hidden transition-opacity" onclick="toggleSidebar()"></div>
+
+    <!-- SIDEBAR KIRI -->
+    <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between transition-transform duration-300 transform -translate-x-full md:translate-x-0 md:static shadow-xl md:shadow-none">
+        <div class="overflow-y-auto">
+            <!-- Logo Header Sidebar -->
+            <div class="px-4 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <div class="flex items-center gap-3 overflow-hidden">
+                    <img id="sidebar-logo-img" src="assets/icons/Logo.png" alt="Logo RTKu Digital" class="h-14 w-14 object-contain flex-shrink-0">
+                    <div class="flex flex-col truncate">
+                        <span class="font-extrabold text-slate-800 dark:text-slate-100 text-sm leading-tight truncate" id="sidebar-company-title">RTKu Digital</span>
+                    </div>
+                </div>
+                <button type="button" onclick="toggleSidebar()" class="md:hidden text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 p-1" aria-label="Tutup Sidebar">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+
+            <!-- Menu Navigasi Samping Desktop -->
+            <nav id="sidebar-nav" class="p-3 space-y-3 text-sm font-medium">
+                <div class="space-y-1">
+                    <a href="#/" data-link data-route="home" class="flex items-center gap-3 px-3 py-2.5 rounded-none text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                        Beranda
+                    </a>
+                    <a href="#/kas-layanan" data-link data-route="kas-layanan" class="flex items-center gap-3 px-3 py-2.5 rounded-none text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                        Kas &amp; Layanan
+                    </a>
+                    <a href="#/absensi" data-link data-route="absensi" class="flex items-center gap-3 px-3 py-2.5 rounded-none text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                        Absensi
+                    </a>
+                    <a href="#/galeri" data-link data-route="galeri" class="flex items-center gap-3 px-3 py-2.5 rounded-none text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                        Galeri
+                    </a>
+                    <a href="#/berita" data-link data-route="berita" class="flex items-center gap-3 px-3 py-2.5 rounded-none text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"/></svg>
+                        Berita &amp; Agenda
+                    </a>
+                    <a href="#/kontak" data-link data-route="kontak" class="flex items-center gap-3 px-3 py-2.5 rounded-none text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                        Kontak
+                    </a>
+                </div>
+
+                <!-- Kelompok Administrator -->
+                <div data-admin-group class="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
+                    <div class="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+                        <svg class="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                        <span>Administrator</span>
+                    </div>
+                    <a href="#/tamu" data-link data-route="tamu" data-admin-only class="flex items-center gap-3 px-3 py-2.5 rounded-none text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                        Warga / Tamu
+                    </a>
+                    <a href="#/staf" data-link data-route="staf" data-admin-only class="flex items-center gap-3 px-3 py-2.5 rounded-none text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                        Pengurus
+                    </a>
+                    <a href="#/analytics" data-link data-route="analytics" data-admin-only class="flex items-center gap-3 px-3 py-2.5 rounded-none text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                        Analytics
+                    </a>
+                    <a href="#/manajemen" data-link data-route="manajemen" data-admin-only class="flex items-center gap-3 px-3 py-2.5 rounded-none text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        Manajemen
+                    </a>
+                    <a href="#/database" data-link data-route="database" data-admin-only class="flex items-center gap-3 px-3 py-2.5 rounded-none text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
+                        Database
+                    </a>
+                </div>
+            </nav>
+        </div>
+
+        <!-- Profil User Desktop di Pojok Kiri Bawah -->
+        <div class="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex flex-col flex-shrink-0">
+            <div class="p-3 flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 overflow-hidden">
+                    <div class="w-8 h-8 rounded-none bg-indigo-600 text-white font-bold flex items-center justify-center text-xs flex-shrink-0 overflow-hidden" id="user-initial">IA</div>
+                    <div class="truncate">
+                        <p class="text-xs font-semibold text-slate-700 dark:text-slate-200 truncate" id="user-name">Ismanto Aithy</p>
+                        <p class="text-[10px] text-slate-400 dark:text-slate-500 truncate" id="user-email">ismanto.khs@gmail.com</p>
+                        <span class="text-[9px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-none mt-0.5 inline-block" id="user-role">-</span>
+                    </div>
+                </div>
+                <button type="button" id="btn-logout" onclick="handleLogout()" title="Keluar" aria-label="Keluar" class="text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 p-1.5 rounded-none transition cursor-pointer">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                </button>
+            </div>
+            <div id="sidebar-copyright-text" class="py-2 px-3 text-center text-[10px] text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-slate-800/80">
+                &copy; 2026 RTKu Digital. All rights reserved.
+            </div>
+        </div>
+    </aside>
+
+    <!-- KONTEN UTAMA -->
+    <div class="flex-1 flex flex-col h-screen min-h-0 overflow-hidden w-full bg-slate-50 dark:bg-slate-950 relative">
+
+        <!-- NAVBAR PUBLIK GLOBAL (MENU UMUM: BERANDA, KAS & LAYANAN, ABSENSI, GALERI, BERITA & AGENDA, KONTAK + TEMA + LAYANAN + AVATAR USER) -->
+        <nav id="global-public-navbar" class="hidden w-full bg-[#faf8f3] dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800 flex-shrink-0 z-30">
+            <div class="max-w-6xl mx-auto px-3 sm:px-4 md:px-6 h-14 flex items-center justify-between gap-2 sm:gap-3">
+                <button id="global-public-mobile-toggle" type="button" class="md:hidden p-2 text-stone-700 dark:text-stone-200 flex-shrink-0" aria-label="Buka Menu">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
+
+                <a href="#/" data-link class="flex items-center gap-2 min-w-0">
+                    <img id="global-public-logo" src="assets/icons/Logo.png" alt="Logo RTKu Digital" class="h-8 w-8 object-contain flex-shrink-0">
+                    <span id="global-public-brand" class="text-sm font-bold text-[#4a5a3f] dark:text-emerald-400 truncate">RTKu Digital</span>
+                </a>
+
+                <div id="global-public-nav-links" class="hidden md:flex items-center gap-6 text-sm font-medium text-stone-700 dark:text-stone-200">
+                    <a href="#/" data-link data-pub-route="/" class="pb-0.5 border-b-2 border-[#c87d32] font-semibold text-stone-900 dark:text-stone-100">Beranda</a>
+                    <a href="#/kas-layanan" data-link data-pub-route="/kas-layanan" class="pb-0.5 hover:text-[#c87d32] transition">Kas &amp; Layanan</a>
+                    <a href="#/absensi" data-link data-pub-route="/absensi" class="pb-0.5 hover:text-[#c87d32] transition">Absensi</a>
+                    <a href="#/galeri" data-link data-pub-route="/galeri" class="pb-0.5 hover:text-[#c87d32] transition">Galeri</a>
+                    <a href="#/berita" data-link data-pub-route="/berita" class="pb-0.5 hover:text-[#c87d32] transition">Berita &amp; Agenda</a>
+                    <a href="#/kontak" data-link data-pub-route="/kontak" class="pb-0.5 hover:text-[#c87d32] transition">Kontak</a>
+                </div>
+
+                <div class="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 relative">
+                    <button
+                        id="global-public-theme-btn"
+                        type="button"
+                        onclick="toggleTheme()"
+                        title="Ubah Tema Terang / Gelap"
+                        aria-label="Ubah Tema Terang atau Gelap"
+                        class="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full border border-stone-300 dark:border-stone-700 bg-[#f6f3ec] dark:bg-stone-800 text-stone-800 dark:text-stone-100 hover:border-[#c87d32] text-[11px] font-semibold transition cursor-pointer flex-shrink-0"
+                    >
+                        <svg class="w-3.5 h-3.5 hidden dark:block text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                        <svg class="w-3.5 h-3.5 block dark:hidden text-[#4a5a3f] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+                        <span id="global-public-nav-theme-text" class="hidden sm:inline">Gelap</span>
+                    </button>
+
+                    <a
+                        id="global-public-booking-btn"
+                        href="https://wa.me/6289602510491?text=Halo%20RTKu%20Digital%2C%20saya%20ingin%20bertanya%20terkait%20pelayanan%20warga."
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="inline-flex items-center gap-1.5 bg-[#5c6d4e] hover:bg-[#4b5a3f] text-white text-xs font-semibold px-3 sm:px-4 py-1.5 rounded-full transition flex-shrink-0"
+                    >
+                        <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+                        </svg>
+                        <span>Layanan</span>
+                    </a>
+
+                    <button
+                        id="global-public-avatar-btn"
+                        type="button"
+                        aria-label="Profil Pengguna"
+                        class="w-8 h-8 rounded-full overflow-hidden bg-[#4a5a3f] dark:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center flex-shrink-0 hover:ring-2 hover:ring-[#c87d32]/60 transition cursor-pointer"
+                    >
+                        <img id="global-public-avatar-img" src="" alt="Profil Pengguna" class="w-full h-full object-cover hidden">
+                        <span id="global-public-avatar-initial">R</span>
+                    </button>
+
+                    <div
+                        id="global-public-user-popover"
+                        class="hidden absolute right-0 top-10 w-56 bg-[#faf8f3] dark:bg-stone-900 border border-stone-200 dark:border-stone-800 shadow-lg p-3 z-50 text-xs space-y-2"
+                    >
+                        <div class="pb-2 border-b border-stone-200 dark:border-stone-800">
+                            <div id="global-public-user-name" class="font-bold text-stone-900 dark:text-stone-100 truncate">User</div>
+                            <div id="global-public-user-sub" class="text-[11px] text-stone-500 dark:text-stone-400 truncate mt-0.5">Warga</div>
+                        </div>
+                        <button
+                            id="global-public-popover-theme-btn"
+                            type="button"
+                            onclick="toggleTheme()"
+                            class="w-full flex items-center justify-between py-1 text-stone-700 dark:text-stone-200 hover:text-[#c87d32] font-medium cursor-pointer"
+                        >
+                            <span>Tema</span>
+                            <span id="global-public-theme-label" class="text-[11px] font-semibold text-[#4a5a3f] dark:text-emerald-400">Terang</span>
+                        </button>
+                        <a
+                            id="global-public-admin-link"
+                            href="#/manajemen"
+                            data-link
+                            class="hidden block py-1 text-stone-700 dark:text-stone-200 hover:text-[#c87d32] font-medium"
+                        >
+                            Panel Manajemen
+                        </a>
+                        <button
+                            id="global-public-logout-btn"
+                            type="button"
+                            onclick="handleLogout()"
+                            class="w-full text-left py-1 text-rose-600 dark:text-rose-400 hover:underline font-semibold cursor-pointer"
+                        >
+                            Keluar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="global-public-mobile-menu" class="hidden md:hidden bg-[#faf8f3] dark:bg-stone-900 border-t border-stone-200 dark:border-stone-800 px-4 py-2.5 space-y-1 text-sm">
+                <a href="#/" data-link data-pub-route="/" class="flex items-center gap-2.5 py-1.5 font-semibold text-[#c87d32]">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                    <span>Beranda</span>
+                </a>
+                <a href="#/kas-layanan" data-link data-pub-route="/kas-layanan" class="flex items-center gap-2.5 py-1.5 text-stone-700 dark:text-stone-200 hover:text-[#c87d32] transition">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                    <span>Kas &amp; Layanan</span>
+                </a>
+                <a href="#/absensi" data-link data-pub-route="/absensi" class="flex items-center gap-2.5 py-1.5 text-stone-700 dark:text-stone-200 hover:text-[#c87d32] transition">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                    <span>Absensi</span>
+                </a>
+                <a href="#/galeri" data-link data-pub-route="/galeri" class="flex items-center gap-2.5 py-1.5 text-stone-700 dark:text-stone-200 hover:text-[#c87d32] transition">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                    <span>Galeri</span>
+                </a>
+                <a href="#/berita" data-link data-pub-route="/berita" class="flex items-center gap-2.5 py-1.5 text-stone-700 dark:text-stone-200 hover:text-[#c87d32] transition">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"/></svg>
+                    <span>Berita &amp; Agenda</span>
+                </a>
+                <a href="#/kontak" data-link data-pub-route="/kontak" class="flex items-center gap-2.5 py-1.5 text-stone-700 dark:text-stone-200 hover:text-[#c87d32] transition">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                    <span>Kontak</span>
+                </a>
+            </div>
+        </nav>
+
+        <!-- Header Atas (Internal / Dashboard) -->
+        <header class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 h-16 md:min-h-[4.75rem] md:py-2 flex items-center justify-between gap-2 px-3 md:px-6 z-10 flex-shrink-0">
+            <div class="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+                <button type="button" id="sidebar-toggle-btn" onclick="toggleSidebar()" class="hidden md:flex items-center justify-center p-2 rounded-none text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition focus:outline-none cursor-pointer" title="Sembunyikan/Tampilkan Sidebar" aria-label="Sembunyikan atau Tampilkan Sidebar">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                </button>
+
+                <!-- Logo Mobile (Kotak Siku Ramping) -->
+                <div class="flex items-center md:hidden flex-shrink-0">
+                    <span class="w-8 h-8 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 rounded-none flex items-center justify-center overflow-hidden">
+                        <img id="mobile-logo-img" src="assets/icons/Logo.png" alt="Logo RTKu Digital" class="w-6 h-6 object-contain">
+                    </span>
+                </div>
+
+                <!-- Info Aplikasi -->
+                <div class="flex items-center gap-3 min-w-0 flex-1">
+                    <img id="header-logo-img" src="assets/icons/icon-192.png" alt="Logo RTKu Digital" class="h-12 w-12 object-cover rounded-none border border-transparent hidden md:block flex-shrink-0">
+
+                    <div class="flex flex-col justify-center min-w-0 flex-1">
+                        <h2 class="text-xs md:text-sm font-bold text-slate-800 dark:text-slate-100 truncate leading-tight" id="header-company-name">RTKu Digital</h2>
+                        <div class="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10px] md:text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
+                            <span id="header-company-address" class="truncate max-w-[210px] sm:max-w-xs md:max-w-md">-</span>
+                            <span id="header-company-phone-wrap" class="hidden items-center gap-1 flex-shrink-0">
+                                <span>•</span>
+                                <span id="header-company-phone">-</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 md:gap-3 flex-shrink-0">
+                <button type="button" id="theme-toggle-btn" onclick="toggleTheme()" class="hidden md:block p-2 rounded-none text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition focus:outline-none cursor-pointer" title="Ubah Tema Cerah/Gelap" aria-label="Ubah Tema Cerah atau Gelap">
+                    <svg class="w-5 h-5 hidden dark:block text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                    <svg class="w-5 h-5 block dark:hidden text-indigo-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+                </button>
+
+                <span class="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-none text-xs font-medium bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-900">
+                    <span class="w-1.5 h-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400 animate-pulse"></span> Aktif
+                </span>
+
+                <!-- Foto Profil Mobile (Kotak Siku Sejajar h-8) -->
+                <div class="md:hidden relative flex-shrink-0">
+                    <button type="button" id="mobile-profile-btn" aria-label="Profil Pengguna" class="w-8 h-8 rounded-none overflow-hidden border border-slate-200 dark:border-slate-700 flex items-center justify-center bg-indigo-600 text-white text-xs font-bold focus:outline-none">
+                        <img src="" alt="Profile" class="w-full h-full object-cover hidden" id="mobile-user-avatar-img">
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Area Render View Dinamis -->
+        <main id="app" class="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 bg-slate-50 dark:bg-slate-950 pb-28 md:pb-12">
+        </main>
+
+        <!-- FOOTER PUBLIK GLOBAL (HANYA TAMPIL DI DESKTOP, DISEMBUNYIKAN SAAT VERSI HP) -->
+        <footer id="global-public-footer" class="hidden md:block bg-[#5c6d4e] dark:bg-stone-900 dark:border-t dark:border-stone-800 text-white w-full flex-shrink-0 z-20">
+            <div class="max-w-6xl mx-auto px-4 md:px-6 py-4 grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-8 text-xs">
+                <div class="space-y-0.5">
+                    <h3 class="text-sm font-bold">Contact</h3>
+                    <p id="global-footer-phone">-</p>
+                    <p id="global-footer-email">-</p>
+                </div>
+                <div class="space-y-0.5">
+                    <h3 class="text-sm font-bold">Address</h3>
+                    <p id="global-footer-address">-</p>
+                </div>
+                <div class="space-y-0.5">
+                    <h3 class="text-sm font-bold">Informasi</h3>
+                    <p id="global-footer-brand">RTKu Digital</p>
+                </div>
+            </div>
+        </footer>
+
+        <!-- BAR RUNNING TEXT (TAMPIL DI DESKTOP & MOBILE DI BAGIAN BAWAH) -->
+        <div id="global-running-text-container" class="fixed md:static bottom-16 md:bottom-0 left-0 right-0 z-20 w-full bg-amber-50 dark:bg-amber-950/90 border-t border-amber-200 dark:border-amber-900/60 px-3 md:px-5 py-1.5 overflow-hidden flex items-center flex-shrink-0">
+            <span class="text-[10px] md:text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300 mr-2.5 flex-shrink-0 flex items-center gap-1 z-10 bg-amber-50 dark:bg-amber-950/90 pr-2">
+                📢 INFO:
+            </span>
+            <div id="global-running-text-viewport" class="overflow-hidden relative flex-1 w-full min-w-0">
+                <div id="global-running-text-content" class="marquee-track text-[11px] md:text-xs text-amber-900 dark:text-amber-200 font-medium">
+                    Selamat datang di RTKu Digital.
+                </div>
+            </div>
+        </div>
+
+        <!-- BOTTOM NAVIGATION (KHUSUS MOBILE) -->
+        <nav id="bottom-nav" class="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 h-16 flex items-center justify-around px-1 shadow-lg">
+            <a href="#/" data-link data-route="home" class="flex flex-col items-center justify-center text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 text-[10px] font-medium py-1 w-full">
+                <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                Beranda
+            </a>
+            <a href="#/kas-layanan" data-link data-route="kas-layanan" class="flex flex-col items-center justify-center text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 text-[10px] font-medium py-1 w-full">
+                <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                Kas
+            </a>
+            <a href="#/absensi" data-link data-route="absensi" class="flex flex-col items-center justify-center text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 text-[10px] font-medium py-1 w-full">
+                <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                Absensi
+            </a>
+            <a href="#/galeri" data-link data-route="galeri" class="flex flex-col items-center justify-center text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 text-[10px] font-medium py-1 w-full">
+                <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                Galeri
+            </a>
+            <button type="button" onclick="toggleMobileMoreMenu()" class="flex flex-col items-center justify-center text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 text-[10px] font-medium py-1 w-full focus:outline-none cursor-pointer">
+                <svg class="w-5 h-5 mb-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                More
+            </button>
+        </nav>
+
+        <!-- Pop-up Menu More -->
+        <div id="mobile-more-popup" class="hidden fixed inset-0 bg-slate-950/30 z-40 md:hidden flex items-end justify-end pb-28 pr-2">
+            <div id="mobile-more-box" class="bg-white dark:bg-slate-900 w-56 rounded-none border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col">
+                <div class="bg-indigo-900 text-white px-3.5 py-2 flex items-center justify-between flex-shrink-0">
+                    <span class="text-[11px] font-bold tracking-widest uppercase">OPTION MENU</span>
+                    <button type="button" onclick="toggleMobileMoreMenu()" aria-label="Tutup Menu More" class="text-indigo-200 hover:text-white p-0.5">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+
+                <div class="divide-y divide-slate-100 dark:divide-slate-800 text-slate-700 dark:text-slate-200 text-xs">
+                    <!-- Area Atas Pop-up -->
+                    <div>
+                        <a href="#/" data-link data-route="home" class="flex items-center gap-3 px-3.5 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition">
+                            <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+                            <span class="font-medium">Beranda</span>
+                        </a>
+                        <a href="#/kas-layanan" data-link data-route="kas-layanan" class="flex items-center gap-3 px-3.5 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition">
+                            <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                            <span class="font-medium">Kas &amp; Layanan</span>
+                        </a>
+                        <a href="#/absensi" data-link data-route="absensi" class="flex items-center gap-3 px-3.5 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition">
+                            <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                            <span class="font-medium">Absensi</span>
+                        </a>
+                        <a href="#/galeri" data-link data-route="galeri" class="flex items-center gap-3 px-3.5 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition">
+                            <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            <span class="font-medium">Galeri</span>
+                        </a>
+                        <a href="#/berita" data-link data-route="berita" class="flex items-center gap-3 px-3.5 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition">
+                            <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"/></svg>
+                            <span class="font-medium">Berita &amp; Agenda</span>
+                        </a>
+                        <a href="#/kontak" data-link data-route="kontak" class="flex items-center gap-3 px-3.5 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition">
+                            <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                            <span class="font-medium">Kontak</span>
+                        </a>
+                    </div>
+
+                    <div data-admin-group>
+                        <div class="px-3.5 py-1.5 bg-slate-50 dark:bg-slate-950/60 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                            Administrator
+                        </div>
+
+                        <a href="#/tamu" data-link data-route="tamu" data-admin-only class="flex items-center gap-3 px-3.5 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition">
+                            <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                            <span class="font-medium">Warga / Tamu</span>
+                        </a>
+                        <a href="#/staf" data-link data-route="staf" data-admin-only class="flex items-center gap-3 px-3.5 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition">
+                            <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                            <span class="font-medium">Pengurus</span>
+                        </a>
+                        <a href="#/analytics" data-link data-route="analytics" data-admin-only class="flex items-center gap-3 px-3.5 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition">
+                            <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                            <span class="font-medium">Analytics</span>
+                        </a>
+                        <a href="#/manajemen" data-link data-route="manajemen" data-admin-only class="flex items-center gap-3 px-3.5 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition">
+                            <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                            <span class="font-medium">Manajemen</span>
+                        </a>
+                        <a href="#/database" data-link data-route="database" data-admin-only class="flex items-center gap-3 px-3.5 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition">
+                            <svg class="w-4 h-4 text-indigo-600 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
+                            <span class="font-medium">Database</span>
+                        </a>
+                    </div>
+
+                    <button type="button" onclick="toggleMobileMoreMenu(); handleLogout();" class="w-full flex items-center gap-3 px-3.5 py-2.5 hover:bg-red-50 dark:hover:bg-red-950/40 text-red-600 dark:text-red-400 transition text-left cursor-pointer">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                        <span class="font-medium">Keluar</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Hak Akses Menu Berdasarkan Role (Warga/non-admin tidak melihat kelompok Administrator) -->
+    <script>
+        window.applyRoleMenuVisibility = function(roleOverride = null) {
+            const role = String(roleOverride || localStorage.getItem('user_role') || '').trim().toLowerCase();
+            const isAdmin = role === 'administrator';
+
+            document.querySelectorAll('[data-admin-group], [data-admin-only]').forEach(el => {
+                el.classList.toggle('hidden', !isAdmin);
+            });
+
+            if (typeof window.syncGlobalPublicUserAvatar === 'function') {
+                window.syncGlobalPublicUserAvatar();
+            }
+        };
+
+        window.syncGlobalPublicNavbar = function(showPublicChrome = false, activePath = '/') {
+            const pubNav = document.getElementById('global-public-navbar');
+            const pubFooter = document.getElementById('global-public-footer');
+            const appContainer = document.getElementById('app');
+
+            if (pubNav) {
+                pubNav.classList.toggle('hidden', !showPublicChrome);
+            }
+            if (pubFooter) {
+                pubFooter.classList.toggle('hidden', !showPublicChrome);
+                pubFooter.classList.toggle('md:block', Boolean(showPublicChrome));
+            }
+            if (appContainer) {
+                if (showPublicChrome) {
+                    appContainer.classList.remove('p-4', 'md:p-6', 'bg-slate-50', 'dark:bg-slate-950');
+                    appContainer.classList.add('p-0', 'bg-[#f6f3ec]', 'dark:bg-stone-950');
+                } else {
+                    appContainer.classList.remove('p-0', 'bg-[#f6f3ec]', 'dark:bg-stone-950');
+                    appContainer.classList.add('p-4', 'md:p-6', 'bg-slate-50', 'dark:bg-slate-950');
+                }
+            }
+
+            if (!showPublicChrome || !pubNav) return;
+
+            const normalized = String(activePath || '/').toLowerCase();
+            pubNav.querySelectorAll('[data-pub-route]').forEach((link) => {
+                const routeAttr = String(link.getAttribute('data-pub-route') || '').toLowerCase();
+                const isActive =
+                    routeAttr === normalized ||
+                    (normalized === '/kas-layanan' && (routeAttr === '/kas-layanan' || routeAttr === '/unit-usaha'));
+
+                if (link.closest('#global-public-mobile-menu')) {
+                    link.className = isActive
+                        ? 'flex items-center gap-2.5 py-1.5 font-semibold text-[#c87d32]'
+                        : 'flex items-center gap-2.5 py-1.5 text-stone-700 dark:text-stone-200 hover:text-[#c87d32] transition';
+                } else {
+                    link.className = isActive
+                        ? 'pb-0.5 border-b-2 border-[#c87d32] font-semibold text-stone-900 dark:text-stone-100'
+                        : 'pb-0.5 text-stone-700 dark:text-stone-200 hover:text-[#c87d32] transition';
+                }
+            });
+
+            if (typeof window.syncGlobalPublicUserAvatar === 'function') {
+                window.syncGlobalPublicUserAvatar();
+            }
+            if (typeof window.syncThemeToggleLabels === 'function') {
+                window.syncThemeToggleLabels();
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            window.applyRoleMenuVisibility();
+            if (typeof window.syncThemeToggleLabels === 'function') {
+                window.syncThemeToggleLabels();
+            }
+            const pubToggle = document.getElementById('global-public-mobile-toggle');
+            const pubMobileMenu = document.getElementById('global-public-mobile-menu');
+            const pubAvatarBtn = document.getElementById('global-public-avatar-btn');
+            const pubPopover = document.getElementById('global-public-user-popover');
+
+            pubToggle?.addEventListener('click', () => {
+                pubMobileMenu?.classList.toggle('hidden');
+            });
+
+            pubAvatarBtn?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                pubPopover?.classList.toggle('hidden');
+            });
+
+            document.addEventListener('click', (e) => {
+                if (pubPopover && !pubPopover.contains(e.target) && e.target !== pubAvatarBtn && !pubAvatarBtn?.contains(e.target)) {
+                    pubPopover.classList.add('hidden');
+                }
+                if (e.target.closest('#global-public-navbar a[data-link]')) {
+                    pubMobileMenu?.classList.add('hidden');
+                    pubPopover?.classList.add('hidden');
+                }
+            });
+        });
+    </script>
+
+    <!-- Script Mengambil Profil Perusahaan & Running Text dari Firestore -->
+    <script type="module">
+        import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { doc, getDoc, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { auth, db } from "./assets/js/firebase-init.js";
+
+        const SIDEBAR_BRAND_NAME = "RTKu Digital";
+        let latestRunningText = "Selamat datang di RTKu Digital.";
+        let latestSpeed = "normal";
+        let isAuthenticatedUser = false;
+
+        function formatBookingWaLink(rawPhone = "", brandName = "RTKu Digital") {
+            let digits = String(rawPhone || "").replace(/\D/g, "");
+            if (!digits) digits = "6289602510491";
+            if (digits.startsWith("0")) digits = "62" + digits.slice(1);
+            const msg = encodeURIComponent(`Halo ${brandName}, saya ingin bertanya terkait pelayanan warga.`);
+            return `https://wa.me/${digits}?text=${msg}`;
+        }
+
+        function isTextItemActive(data = {}) {
+            if (typeof data.aktif === "boolean") return data.aktif;
+            const statusStr = String(data.status || "").trim().toLowerCase();
+            if (statusStr === "aktif" || statusStr === "active" || statusStr === "true") return true;
+            if (statusStr === "nonaktif" || statusStr === "inactive" || statusStr === "false") return false;
+            return true;
+        }
+
+        function applyMarqueeMetrics(text = latestRunningText, speed = latestSpeed) {
+            const viewport = document.getElementById('global-running-text-viewport');
+            const track = document.getElementById('global-running-text-content');
+            if (!viewport || !track) return;
+
+            track.textContent = text;
+
+            requestAnimationFrame(() => {
+                const viewportWidth = viewport.clientWidth || (window.innerWidth - 360) || 640;
+                const textWidth = track.scrollWidth || 240;
+
+                const startPx = Math.max(200, viewportWidth);
+                const endPx = -(Math.max(120, textWidth));
+                const totalDistancePx = Math.max(240, startPx - endPx);
+
+                const pxPerSecond = speed === 'fast' ? 95 : (speed === 'slow' ? 40 : 65);
+                const durationSec = Math.max(8, totalDistancePx / pxPerSecond);
+
+                track.style.setProperty('--marquee-start', `${startPx}px`);
+                track.style.setProperty('--marquee-end', `${endPx}px`);
+                track.style.setProperty('--marquee-duration', `${durationSec.toFixed(2)}s`);
+                track.style.animationPlayState = 'running';
+            });
+        }
+
+        async function loadCompanyProfile(force = false) {
+            if (!force && !isAuthenticatedUser) return;
+            try {
+                const docRef = doc(db, "pengaturan", "profil_perusahaan");
+                const docSnap = await getDoc(docRef);
+
+                let namaPerusahaan = "RTKu Digital";
+                let alamatPerusahaan = "";
+                let teleponPerusahaan = "";
+                let emailPerusahaan = "";
+                let iconUrl = "assets/icons/icon-192.png";
+                let mobileIconUrl = "assets/icons/Logo.png";
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    if (data.nama) namaPerusahaan = String(data.nama).trim();
+                    alamatPerusahaan = String(data.alamat || data.alamat_lengkap || "").trim();
+                    teleponPerusahaan = String(data.telepon || data.telp || data.no_hp || data.hp || data.wa || "").trim();
+                    emailPerusahaan = String(data.email || "").trim();
+
+                    if (data.iconUrl) {
+                        iconUrl = data.iconUrl;
+                        mobileIconUrl = data.iconUrl;
+                    } else if (data.logo) {
+                        iconUrl = data.logo;
+                        mobileIconUrl = data.logo;
+                    }
+                }
+
+                const sidebarTitleEl = document.getElementById('sidebar-company-title');
+                const headerCompanyNameEl = document.getElementById('header-company-name');
+                const headerAddressEl = document.getElementById('header-company-address');
+                const headerPhoneWrapEl = document.getElementById('header-company-phone-wrap');
+                const headerPhoneEl = document.getElementById('header-company-phone');
+                const copyrightEl = document.getElementById('sidebar-copyright-text');
+                const headerLogoEl = document.getElementById('header-logo-img');
+                const mobileLogoEl = document.getElementById('mobile-logo-img');
+                const appleIconEl = document.getElementById('apple-touch-icon-link');
+                const pubBrandEl = document.getElementById('global-public-brand');
+                const pubLogoEl = document.getElementById('global-public-logo');
+                const pubBookingEl = document.getElementById('global-public-booking-btn');
+                const pubFooterPhoneEl = document.getElementById('global-footer-phone');
+                const pubFooterEmailEl = document.getElementById('global-footer-email');
+                const pubFooterAddressEl = document.getElementById('global-footer-address');
+                const pubFooterBrandEl = document.getElementById('global-footer-brand');
+
+                if (sidebarTitleEl) sidebarTitleEl.textContent = namaPerusahaan;
+                if (headerCompanyNameEl) headerCompanyNameEl.textContent = namaPerusahaan;
+                if (pubBrandEl && namaPerusahaan) {
+                    pubBrandEl.textContent = namaPerusahaan;
+                }
+                if (pubBookingEl) {
+                    pubBookingEl.href = formatBookingWaLink(teleponPerusahaan, namaPerusahaan);
+                }
+                if (pubFooterPhoneEl) pubFooterPhoneEl.textContent = teleponPerusahaan || "-";
+                if (pubFooterEmailEl) pubFooterEmailEl.textContent = emailPerusahaan || "-";
+                if (pubFooterAddressEl) pubFooterAddressEl.textContent = alamatPerusahaan || "-";
+                if (pubFooterBrandEl && namaPerusahaan) {
+                    pubFooterBrandEl.textContent = namaPerusahaan;
+                }
+                document.title = namaPerusahaan;
+
+                if (headerAddressEl) {
+                    headerAddressEl.textContent = alamatPerusahaan || "-";
+                }
+
+                if (headerPhoneWrapEl && headerPhoneEl) {
+                    if (teleponPerusahaan) {
+                        headerPhoneEl.textContent = teleponPerusahaan;
+                        headerPhoneWrapEl.classList.remove('hidden');
+                        headerPhoneWrapEl.classList.add('inline-flex');
+                    } else {
+                        headerPhoneEl.textContent = "-";
+                        headerPhoneWrapEl.classList.add('hidden');
+                        headerPhoneWrapEl.classList.remove('inline-flex');
+                    }
+                }
+
+                if (copyrightEl) copyrightEl.textContent = `© 2026 ${SIDEBAR_BRAND_NAME}. All rights reserved.`;
+
+                if (mobileLogoEl && mobileIconUrl) {
+                    mobileLogoEl.src = mobileIconUrl;
+                }
+                if (pubLogoEl && mobileIconUrl) {
+                    pubLogoEl.src = mobileIconUrl;
+                }
+
+                if (iconUrl) {
+                    if (headerLogoEl) headerLogoEl.src = iconUrl;
+                    if (appleIconEl) appleIconEl.href = iconUrl;
+                }
+
+                if (latestRunningText === "Selamat datang di RTKu Digital.") {
+                    latestRunningText = `Selamat datang di ${namaPerusahaan}.`;
+                    applyMarqueeMetrics(latestRunningText, latestSpeed);
+                }
+            } catch (error) {
+                console.error("Gagal memuat profil perusahaan dari database:", error);
+            }
+        }
+
+        window.reloadCompanyProfile = () => loadCompanyProfile(true);
+
+        async function loadRunningText(force = false) {
+            if (!force && !isAuthenticatedUser) {
+                applyMarqueeMetrics(latestRunningText, latestSpeed);
+                return;
+            }
+            try {
+                const wrapper = document.getElementById('global-running-text-container');
+                const container = document.getElementById('global-running-text-content');
+                if (!wrapper || !container) return;
+
+                let globalAktif = true;
+                let kecepatan = 'normal';
+
+                const configSnap = await getDoc(doc(db, "pengaturan", "running_text"));
+                if (configSnap.exists()) {
+                    const cfg = configSnap.data();
+                    if (typeof cfg.aktif === 'boolean') globalAktif = cfg.aktif;
+                    if (cfg.kecepatan) kecepatan = cfg.kecepatan;
+                }
+
+                if (!globalAktif) {
+                    wrapper.classList.add('hidden');
+                    return;
+                }
+                wrapper.classList.remove('hidden');
+
+                const querySnapshot = await getDocs(collection(db, "running_text"));
+                const activeDocs = [];
+                querySnapshot.forEach((docSnap) => {
+                    const data = docSnap.data() || {};
+                    const isiTeks = String(data.teks || data.isi || data.text || "").trim();
+                    if (isTextItemActive(data) && isiTeks) {
+                        activeDocs.push({
+                            urutan: Number(data.urutan) || 999,
+                            createdAt: String(data.createdAt || ""),
+                            teks: isiTeks
+                        });
+                    }
+                });
+
+                activeDocs.sort((a, b) => {
+                    if (a.urutan !== b.urutan) return a.urutan - b.urutan;
+                    return b.createdAt.localeCompare(a.createdAt);
+                });
+
+                const texts = activeDocs.map((item) => item.teks);
+                const fallbackName = document.getElementById('header-company-name')?.textContent?.trim() || "RTKu Digital";
+
+                latestRunningText = texts.length > 0
+                    ? texts.join("   •   ")
+                    : `Selamat datang di ${fallbackName}.`;
+                latestSpeed = kecepatan;
+
+                applyMarqueeMetrics(latestRunningText, latestSpeed);
+            } catch (error) {
+                console.error("Gagal memuat running text:", error);
+                applyMarqueeMetrics(latestRunningText, latestSpeed);
+            }
+        }
+
+        window.reloadGlobalRunningText = () => loadRunningText(true);
+        window.syncRunningTextPosition = function(shouldReload = false) {
+            applyMarqueeMetrics(latestRunningText, latestSpeed);
+            if (shouldReload && isAuthenticatedUser) {
+                loadRunningText(true);
+            }
+        };
+
+        onAuthStateChanged(auth, (user) => {
+            isAuthenticatedUser = Boolean(user);
+            if (isAuthenticatedUser) {
+                loadCompanyProfile(true);
+                loadRunningText(true);
+            } else {
+                latestRunningText = "Selamat datang di RTKu Digital.";
+                applyMarqueeMetrics(latestRunningText, latestSpeed);
+            }
+        });
+
+        window.addEventListener("resize", () => {
+            applyMarqueeMetrics(latestRunningText, latestSpeed);
+        });
+
+        document.addEventListener("DOMContentLoaded", () => {
+            applyMarqueeMetrics(latestRunningText, latestSpeed);
+            if (auth.currentUser) {
+                isAuthenticatedUser = true;
+                loadCompanyProfile(true);
+                loadRunningText(true);
+            }
+        });
+    </script>
+
+    <!-- Script Toggle Sidebar, Tema & Menu More -->
+    <script>
+        function syncThemeToggleLabels() {
+            const isDark = document.documentElement.classList.contains('dark');
+            const labelEl = document.getElementById('global-public-theme-label');
+            const navTextEl = document.getElementById('global-public-nav-theme-text');
+            if (labelEl) {
+                labelEl.textContent = isDark ? 'Gelap' : 'Terang';
+            }
+            if (navTextEl) {
+                navTextEl.textContent = isDark ? 'Terang' : 'Gelap';
+            }
+        }
+        window.syncThemeToggleLabels = syncThemeToggleLabels;
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const backdrop = document.getElementById('sidebar-backdrop');
+
+            if (!sidebar) return;
+
+            if (window.innerWidth < 768) {
+                const isOpen = !sidebar.classList.contains('-translate-x-full');
+                if (isOpen) {
+                    sidebar.classList.add('-translate-x-full');
+                    if (backdrop) backdrop.classList.add('hidden');
+                } else {
+                    sidebar.classList.remove('-translate-x-full');
+                    if (backdrop) backdrop.classList.remove('hidden');
+                }
+            } else {
+                if (sidebar.style.display === 'none') {
+                    sidebar.style.display = 'flex';
+                    sidebar.classList.remove('-translate-x-full');
+                } else {
+                    sidebar.style.display = 'none';
+                }
+            }
+
+            if (typeof window.syncRunningTextPosition === 'function') {
+                setTimeout(() => window.syncRunningTextPosition(false), 150);
+            }
+        }
+
+        function toggleTheme() {
+            const htmlEl = document.documentElement;
+            if (htmlEl.classList.contains('dark')) {
+                htmlEl.classList.remove('dark');
+                localStorage.setItem('app_theme', 'light');
+            } else {
+                htmlEl.classList.add('dark');
+                localStorage.setItem('app_theme', 'dark');
+            }
+            syncThemeToggleLabels();
+        }
+
+        function toggleMobileMoreMenu() {
+            const popup = document.getElementById('mobile-more-popup');
+            if (!popup) return;
+            if (typeof window.applyRoleMenuVisibility === 'function') {
+                window.applyRoleMenuVisibility();
+            }
+            popup.classList.toggle('hidden');
+        }
+
+        document.addEventListener('click', (e) => {
+            const popup = document.getElementById('mobile-more-popup');
+            const menuBox = document.getElementById('mobile-more-box');
+
+            if (popup && !popup.classList.contains('hidden')) {
+                const isClickInsideBox = menuBox && menuBox.contains(e.target);
+                const isClickMoreButton = e.target.closest('button[onclick="toggleMobileMoreMenu()"]');
+
+                if (!isClickInsideBox && !isClickMoreButton) {
+                    popup.classList.add('hidden');
+                }
+            }
+
+            if (e.target.closest('a[data-link]')) {
+                if (popup && !popup.classList.contains('hidden')) {
+                    popup.classList.add('hidden');
+                }
+                if (window.innerWidth < 768) {
+                    const sidebar = document.getElementById('sidebar');
+                    const backdrop = document.getElementById('sidebar-backdrop');
+                    if (sidebar) sidebar.classList.add('-translate-x-full');
+                    if (backdrop) backdrop.classList.add('hidden');
+                }
+            }
+        });
+    </script>
+
+    <!-- Script Utama -->
+    <script type="module" src="assets/js/app.js"></script>
+</body>
+</html>
