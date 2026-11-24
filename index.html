@@ -216,7 +216,7 @@
             <!-- Logo Header Sidebar -->
             <div class="px-4 py-3.5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
                 <div class="flex items-center gap-3 overflow-hidden">
-                    <img id="sidebar-logo-img" src="assets/icons/Logo.png" alt="Logo RTKu Digital" class="h-14 w-14 object-contain flex-shrink-0">
+                    <img id="sidebar-logo-img" src="assets/icons/logo.png" alt="Logo RTKu Digital" onerror="this.onerror=null;this.src='assets/icons/icon-192.png';" class="h-14 w-14 object-contain flex-shrink-0">
                     <div class="flex flex-col truncate">
                         <span class="font-extrabold text-slate-800 dark:text-slate-100 text-sm leading-tight truncate" id="sidebar-company-title">RTKu Digital</span>
                     </div>
@@ -319,7 +319,7 @@
                 </button>
 
                 <a href="#/" data-link class="flex items-center gap-2 min-w-0">
-                    <img id="global-public-logo" src="assets/icons/Logo.png" alt="Logo RTKu Digital" class="h-8 w-8 object-contain flex-shrink-0">
+                    <img id="global-public-logo" src="assets/icons/logo.png" alt="Logo RTKu Digital" onerror="this.onerror=null;this.src='assets/icons/icon-192.png';" class="h-8 w-8 object-contain flex-shrink-0">
                     <span id="global-public-brand" class="text-sm font-bold text-[#4a5a3f] dark:text-emerald-400 truncate">RTKu Digital</span>
                 </a>
 
@@ -446,13 +446,13 @@
                 <!-- Logo Mobile (Kotak Siku Ramping) -->
                 <div class="flex items-center md:hidden flex-shrink-0">
                     <span class="w-8 h-8 border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 rounded-none flex items-center justify-center overflow-hidden">
-                        <img id="mobile-logo-img" src="assets/icons/Logo.png" alt="Logo RTKu Digital" class="w-6 h-6 object-contain">
+                        <img id="mobile-logo-img" src="assets/icons/logo.png" alt="Logo RTKu Digital" onerror="this.onerror=null;this.src='assets/icons/icon-192.png';" class="w-6 h-6 object-contain">
                     </span>
                 </div>
 
                 <!-- Info Aplikasi -->
                 <div class="flex items-center gap-3 min-w-0 flex-1">
-                    <img id="header-logo-img" src="assets/icons/icon-192.png" alt="Logo RTKu Digital" class="h-12 w-12 object-cover rounded-none border border-transparent hidden md:block flex-shrink-0">
+                    <img id="header-logo-img" src="assets/icons/icon-192.png" alt="Logo RTKu Digital" onerror="this.onerror=null;this.src='assets/icons/logo.png';" class="h-12 w-12 object-cover rounded-none border border-transparent hidden md:block flex-shrink-0">
 
                     <div class="flex flex-col justify-center min-w-0 flex-1">
                         <h2 class="text-xs md:text-sm font-bold text-slate-800 dark:text-slate-100 truncate leading-tight" id="header-company-name">RTKu Digital</h2>
@@ -723,9 +723,29 @@
         import { auth, db } from "./assets/js/firebase-init.js";
 
         const SIDEBAR_BRAND_NAME = "RTKu Digital";
+        const DEFAULT_ICON_URL = "assets/icons/icon-192.png";
+        const DEFAULT_LOGO_URL = "assets/icons/logo.png";
+
         let latestRunningText = "Selamat datang di RTKu Digital.";
         let latestSpeed = "normal";
         let isAuthenticatedUser = false;
+
+        function bindImageFallback(imgEl, fallbackSrc) {
+            if (!imgEl) return;
+            imgEl.onerror = function() {
+                if (this.getAttribute("data-fallback-applied") === "1") return;
+                this.setAttribute("data-fallback-applied", "1");
+                this.src = fallbackSrc;
+            };
+        }
+
+        function setSafeImageSource(imgEl, nextSrc, fallbackSrc) {
+            if (!imgEl) return;
+            bindImageFallback(imgEl, fallbackSrc);
+            imgEl.removeAttribute("data-fallback-applied");
+            const trimmed = String(nextSrc || "").trim();
+            imgEl.src = trimmed || fallbackSrc;
+        }
 
         function formatBookingWaLink(rawPhone = "", brandName = "RTKu Digital") {
             let digits = String(rawPhone || "").replace(/\D/g, "");
@@ -778,8 +798,8 @@
                 let alamatPerusahaan = "";
                 let teleponPerusahaan = "";
                 let emailPerusahaan = "";
-                let iconUrl = "assets/icons/icon-192.png";
-                let mobileIconUrl = "assets/icons/Logo.png";
+                let iconUrl = DEFAULT_ICON_URL;
+                let mobileIconUrl = DEFAULT_LOGO_URL;
 
                 if (docSnap.exists()) {
                     const data = docSnap.data();
@@ -789,11 +809,11 @@
                     emailPerusahaan = String(data.email || "").trim();
 
                     if (data.iconUrl) {
-                        iconUrl = data.iconUrl;
-                        mobileIconUrl = data.iconUrl;
+                        iconUrl = String(data.iconUrl).trim();
+                        mobileIconUrl = String(data.iconUrl).trim();
                     } else if (data.logo) {
-                        iconUrl = data.logo;
-                        mobileIconUrl = data.logo;
+                        iconUrl = String(data.logo).trim();
+                        mobileIconUrl = String(data.logo).trim();
                     }
                 }
 
@@ -803,6 +823,7 @@
                 const headerPhoneWrapEl = document.getElementById('header-company-phone-wrap');
                 const headerPhoneEl = document.getElementById('header-company-phone');
                 const copyrightEl = document.getElementById('sidebar-copyright-text');
+                const sidebarLogoEl = document.getElementById('sidebar-logo-img');
                 const headerLogoEl = document.getElementById('header-logo-img');
                 const mobileLogoEl = document.getElementById('mobile-logo-img');
                 const appleIconEl = document.getElementById('apple-touch-icon-link');
@@ -848,16 +869,13 @@
 
                 if (copyrightEl) copyrightEl.textContent = `© 2026 ${SIDEBAR_BRAND_NAME}. All rights reserved.`;
 
-                if (mobileLogoEl && mobileIconUrl) {
-                    mobileLogoEl.src = mobileIconUrl;
-                }
-                if (pubLogoEl && mobileIconUrl) {
-                    pubLogoEl.src = mobileIconUrl;
-                }
+                setSafeImageSource(sidebarLogoEl, mobileIconUrl, DEFAULT_ICON_URL);
+                setSafeImageSource(mobileLogoEl, mobileIconUrl, DEFAULT_ICON_URL);
+                setSafeImageSource(pubLogoEl, mobileIconUrl, DEFAULT_ICON_URL);
+                setSafeImageSource(headerLogoEl, iconUrl, DEFAULT_LOGO_URL);
 
-                if (iconUrl) {
-                    if (headerLogoEl) headerLogoEl.src = iconUrl;
-                    if (appleIconEl) appleIconEl.href = iconUrl;
+                if (appleIconEl && iconUrl) {
+                    appleIconEl.href = iconUrl;
                 }
 
                 if (latestRunningText === "Selamat datang di RTKu Digital.") {
@@ -955,6 +973,11 @@
         });
 
         document.addEventListener("DOMContentLoaded", () => {
+            bindImageFallback(document.getElementById("sidebar-logo-img"), DEFAULT_ICON_URL);
+            bindImageFallback(document.getElementById("mobile-logo-img"), DEFAULT_ICON_URL);
+            bindImageFallback(document.getElementById("global-public-logo"), DEFAULT_ICON_URL);
+            bindImageFallback(document.getElementById("header-logo-img"), DEFAULT_LOGO_URL);
+
             applyMarqueeMetrics(latestRunningText, latestSpeed);
             if (auth.currentUser) {
                 isAuthenticatedUser = true;
