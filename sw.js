@@ -1,4 +1,4 @@
-const CACHE_NAME = 'rtku-digital-cache-v2';
+const CACHE_NAME = 'rtku-digital-cache-v3';
 const assetsToCache = [
     './index.html',
     './manifest.json',

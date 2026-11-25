@@ -3,14 +3,29 @@ import { doc, getDoc, collection, getDocs } from "https://www.gstatic.com/fireba
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { db, auth } from "../firebase-init.js";
 
-const DEFAULT_IMG = "assets/icons/Logo.png";
+const DEFAULT_IMG = "assets/icons/logo.png";
 const DEFAULT_WA_NUMBER = "6289602510491";
 const DEFAULT_BRAND_NAME = "RTKu Digital";
 const PROFILE_CACHE_KEY = "rtku_profil_cache_v1";
 const RUNNING_TEXT_CACHE_KEY = "rtku_running_text_cache_v1";
-const MOBILE_INITIAL_LIMIT = 4;
-const DESKTOP_INITIAL_LIMIT = 6;
+const MOBILE_INITIAL_LIMIT = 8;
+const DESKTOP_INITIAL_LIMIT = 12;
 const AGENDA_INITIAL_LIMIT = 4;
+
+const DEFAULT_MAP_CONFIG = {
+    title: "Peta wilayah NULIS RT 03",
+    subtitle: "Nulis RT 03 / 000 Tamantirto Kasihan Bantul Yogyakarta 55184",
+    locationTitle: "Lokasi NULIS RT 03",
+    locationAddress: "Nulis RT 03 / 000 Tamantirto Kasihan Bantul Yogyakarta 55184",
+    center: [-7.8266, 110.3368],
+    zoom: 17,
+    polygon: [
+        [-7.8257, 110.3358],
+        [-7.8256, 110.3378],
+        [-7.8276, 110.3379],
+        [-7.8277, 110.3357]
+    ]
+};
 
 function isSafeImageSrc(src = "") {
     const val = String(src || "").trim();
@@ -43,6 +58,129 @@ function normalizeWaNumber(phone = "", fallback = DEFAULT_WA_NUMBER) {
 
 function stripBasicMarkdown(text = "") {
     return String(text || "").replace(/\*\*/g, "").trim();
+}
+
+function parseLatLngPair(item) {
+    if (!item) return null;
+    if (Array.isArray(item) && item.length >= 2) {
+        const lat = Number(item[0]);
+        const lng = Number(item[1]);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
+    }
+    if (typeof item === "object") {
+        const lat = Number(item.lat ?? item.latitude);
+        const lng = Number(item.lng ?? item.lon ?? item.longitude);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) return [lat, lng];
+    }
+    if (typeof item === "string") {
+        const parts = item.split(",").map((s) => Number(s.trim()));
+        if (parts.length >= 2 && Number.isFinite(parts[0]) && Number.isFinite(parts[1])) {
+            return [parts[0], parts[1]];
+        }
+    }
+    return null;
+}
+
+function normalizeMapConfig(profileRaw = {}, mapDocRaw = null) {
+    const src = mapDocRaw && typeof mapDocRaw === "object" ? { ...profileRaw, ...mapDocRaw } : profileRaw;
+
+    const title = String(
+        src.judulPeta || src.petaJudul || src.mapTitle || DEFAULT_MAP_CONFIG.title
+    ).trim();
+
+    const subtitle = String(
+        src.subjudulPeta || src.petaSubjudul || src.mapSubtitle || DEFAULT_MAP_CONFIG.subtitle
+    ).trim();
+
+    const locationTitle = String(
+        src.judulLokasi || src.lokasiJudul || src.locationTitle || DEFAULT_MAP_CONFIG.locationTitle
+    ).trim();
+
+    const locationAddress = String(
+        src.alamatLokasi || src.lokasiAlamat || src.locationAddress || DEFAULT_MAP_CONFIG.locationAddress
+    ).trim();
+
+    const rawCenter =
+        parseLatLngPair(src.petaCenter) ||
+        parseLatLngPair(src.mapCenter) ||
+        parseLatLngPair(src.koordinat) ||
+        (Number.isFinite(Number(src.lat)) && Number.isFinite(Number(src.lng))
+            ? [Number(src.lat), Number(src.lng)]
+            : null);
+
+    let polygon = [];
+    const rawPoly = src.batasWilayah || src.polygonWilayah || src.polygon || src.coords;
+    if (Array.isArray(rawPoly)) {
+        polygon = rawPoly.map(parseLatLngPair).filter(Boolean);
+    } else if (typeof rawPoly === "string" && rawPoly.trim()) {
+        try {
+            const parsed = JSON.parse(rawPoly);
+            if (Array.isArray(parsed)) {
+                polygon = parsed.map(parseLatLngPair).filter(Boolean);
+            }
+        } catch {
+            // Abaikan format string non-JSON
+        }
+    }
+
+    if (!polygon.length && rawCenter) {
+        const [cLat, cLng] = rawCenter;
+        polygon = [
+            [cLat + 0.0009, cLng - 0.0011],
+            [cLat + 0.0010, cLng + 0.0011],
+            [cLat - 0.0010, cLng + 0.0012],
+            [cLat - 0.0011, cLng - 0.0012]
+        ];
+    }
+
+    const center = rawCenter || (polygon.length ? polygon[0] : DEFAULT_MAP_CONFIG.center);
+    const zoomNum = Number(src.petaZoom ?? src.mapZoom ?? src.zoom ?? DEFAULT_MAP_CONFIG.zoom);
+    const zoom = Number.isFinite(zoomNum) && zoomNum >= 5 && zoomNum <= 19 ? zoomNum : DEFAULT_MAP_CONFIG.zoom;
+
+    return {
+        title: title || DEFAULT_MAP_CONFIG.title,
+        subtitle: subtitle || DEFAULT_MAP_CONFIG.subtitle,
+        locationTitle: locationTitle || DEFAULT_MAP_CONFIG.locationTitle,
+        locationAddress: locationAddress || DEFAULT_MAP_CONFIG.locationAddress,
+        center,
+        zoom,
+        polygon: polygon.length >= 3 ? polygon : DEFAULT_MAP_CONFIG.polygon
+    };
+}
+
+function ensureLeafletLoaded() {
+    return new Promise((resolve, reject) => {
+        if (typeof window !== "undefined" && window.L && typeof window.L.map === "function") {
+            resolve(window.L);
+            return;
+        }
+
+        const existingScript = document.querySelector('script[data-rtku-leaflet="true"]');
+        if (existingScript) {
+            existingScript.addEventListener("load", () => resolve(window.L), { once: true });
+            existingScript.addEventListener("error", () => reject(new Error("Gagal memuat Leaflet JS")), { once: true });
+            return;
+        }
+
+        if (!document.querySelector('link[data-rtku-leaflet-css="true"]')) {
+            const link = document.createElement("link");
+            link.rel = "stylesheet";
+            link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+            link.setAttribute("data-rtku-leaflet-css", "true");
+            document.head.appendChild(link);
+        }
+
+        const script = document.createElement("script");
+        script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+        script.async = true;
+        script.setAttribute("data-rtku-leaflet", "true");
+        script.onload = () => {
+            if (window.L) resolve(window.L);
+            else reject(new Error("Leaflet tidak tersedia setelah dimuat"));
+        };
+        script.onerror = () => reject(new Error("Gagal memuat pustaka peta Leaflet"));
+        document.head.appendChild(script);
+    });
 }
 
 function formatTanggalIndo(rawDate = "") {
@@ -444,6 +582,110 @@ function normalizeAgendaEntry(docId, raw = {}, fallbackJenis = "Pengumuman") {
     };
 }
 
+function getOrgRoleCategory(jabatanRaw = "") {
+    const j = String(jabatanRaw || "").trim().toLowerCase();
+    if (j.includes("penasehat") || j.includes("penasihat")) return "penasehat";
+    if (j.includes("ketua") && !j.includes("wakil")) return "ketua";
+    if (j.includes("wakil ketua") || j.includes("wakil")) return "wakil_ketua";
+    if (j.includes("wakil sekretaris")) return "wakil_sekretaris";
+    if (j.includes("sekretaris")) return "sekretaris";
+    if (j.includes("bendahara")) return "bendahara";
+    return "seksi";
+}
+
+function getOrgSortOrder(jabatanRaw = "") {
+    const cat = getOrgRoleCategory(jabatanRaw);
+    const map = {
+        ketua: 1,
+        penasehat: 2,
+        wakil_ketua: 3,
+        sekretaris: 4,
+        wakil_sekretaris: 5,
+        bendahara: 6,
+        seksi: 7
+    };
+    return map[cat] ?? 9;
+}
+
+function buildOrgPersonRowHtml(p) {
+    const rawFoto = p.fotoProfil || p.foto || p.gambar || p.url || DEFAULT_IMG;
+    const fotoSrc = escapeHtml(isSafeImageSrc(rawFoto) ? rawFoto : DEFAULT_IMG);
+    const namaPengurus = escapeHtml(p.nama || "Pengurus RT");
+
+    return `
+        <button
+            type="button"
+            data-paket-id="${escapeHtml(p.id)}"
+            class="group w-full flex items-center gap-2.5 text-left py-1 px-1 rounded-md hover:bg-black/5 dark:hover:bg-white/5 transition cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-500/40"
+        >
+            <img
+                src="${fotoSrc}"
+                alt="${namaPengurus}"
+                class="w-9 h-9 rounded-full object-cover object-top shrink-0 border border-black/15 dark:border-white/15 bg-white/80 dark:bg-stone-800 group-hover:scale-105 transition duration-200"
+                onerror="this.onerror=null;this.src='${DEFAULT_IMG}';"
+            >
+            <span class="text-[11px] sm:text-xs font-semibold text-slate-900 dark:text-stone-100 leading-snug line-clamp-2">
+                ${namaPengurus}
+            </span>
+        </button>
+    `;
+}
+
+function buildOrgChartCardHtml(roleLabel, members = [], styleKey = "seksi") {
+    const safeRole = escapeHtml((roleLabel || "Pengurus RT").toUpperCase());
+
+    const themeMap = {
+        ketua: {
+            box: "bg-gradient-to-b from-[#d8e8ff] to-[#a9c8f7] dark:from-sky-950 dark:to-sky-900 border-[#6e95cf] dark:border-sky-700 w-full",
+            header: "text-[#0f294a] dark:text-sky-200"
+        },
+        penasehat: {
+            box: "bg-gradient-to-b from-[#e0f2fe] to-[#bae6fd] dark:from-cyan-950 dark:to-cyan-900 border-[#38bdf8] dark:border-cyan-700 w-full",
+            header: "text-[#0c4a6e] dark:text-cyan-200"
+        },
+        wakil_ketua: {
+            box: "bg-gradient-to-b from-[#ffd9dc] to-[#f4a6ad] dark:from-rose-950 dark:to-rose-900 border-[#c97a82] dark:border-rose-700 min-w-[210px] max-w-[260px]",
+            header: "text-[#4a1218] dark:text-rose-200"
+        },
+        sekretaris: {
+            box: "bg-gradient-to-b from-[#e6ffd1] to-[#c4f29b] dark:from-lime-950 dark:to-lime-900 border-[#87b862] dark:border-lime-700 w-full rounded-b-none",
+            header: "text-[#22420c] dark:text-lime-200"
+        },
+        wakil_sekretaris: {
+            box: "bg-gradient-to-b from-[#e9dcff] to-[#cbb4f7] dark:from-violet-950 dark:to-violet-900 border-[#967cc9] dark:border-violet-700 w-full rounded-t-none border-t-0",
+            header: "text-[#2b154d] dark:text-violet-200"
+        },
+        bendahara: {
+            box: "bg-gradient-to-b from-[#ffe7cc] to-[#f9c68b] dark:from-amber-950 dark:to-amber-900 border-[#c99255] dark:border-amber-700 w-full",
+            header: "text-[#4a2806] dark:text-amber-200"
+        },
+        seksi: {
+            box: "bg-gradient-to-b from-[#b8d4ff] to-[#689be8] dark:from-blue-950 dark:to-blue-900 border-[#3f6db5] dark:border-blue-700 w-full h-full",
+            header: "text-[#0b2347] dark:text-blue-200"
+        }
+    };
+
+    const palette = themeMap[styleKey] || themeMap.seksi;
+
+    const rowsHtml = members.map((m, idx) => {
+        const divider = idx > 0
+            ? `<div class="border-t border-black/10 dark:border-white/10 my-1"></div>`
+            : "";
+        return `${divider}${buildOrgPersonRowHtml(m)}`;
+    }).join("");
+
+    return `
+        <div class="${palette.box} border rounded-md px-3 py-2.5 shadow-sm flex flex-col justify-between">
+            <div class="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wide text-center leading-tight pb-1.5 mb-1 border-b border-black/10 dark:border-white/10 ${palette.header}">
+                ${safeRole}
+            </div>
+            <div class="space-y-0.5">
+                ${rowsHtml}
+            </div>
+        </div>
+    `;
+}
+
 export function renderHome() {
     const cached = readCachedProfile();
     const cachedRunningText = readCachedRunningText() || getFallbackDomRunningText();
@@ -459,6 +701,7 @@ export function renderHome() {
         "Portal digital lingkungan RT untuk berbagi pengumuman, rekap kas, agenda warga, serta dokumentasi kegiatan bersama."
     );
     const safeRunningText = escapeHtml(cachedRunningText);
+    const initialMap = normalizeMapConfig(cached || {}, null);
 
     return `
         <style>
@@ -496,6 +739,131 @@ export function renderHome() {
             }
             .home-marquee-wrap:hover .home-marquee-track {
                 animation-play-state: paused;
+            }
+            .org-chart-wrapper {
+                background-color: #ffffff;
+                border: 1px solid #e7e5e4;
+                padding: 1rem;
+            }
+            .dark .org-chart-wrapper {
+                background-color: #1c1917;
+                border-color: #292524;
+            }
+            .org-top-row {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr);
+                align-items: center;
+                max-width: 680px;
+                margin: 0 auto;
+            }
+            .org-top-connector {
+                position: relative;
+                height: 2px;
+                background-color: #475569;
+                width: 100%;
+            }
+            .dark .org-top-connector {
+                background-color: #94a3b8;
+            }
+            .org-line-v {
+                width: 2px;
+                height: 18px;
+                background-color: #475569;
+                margin: 0 auto;
+            }
+            .dark .org-line-v {
+                background-color: #94a3b8;
+            }
+            .org-mid-row {
+                position: relative;
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr);
+                align-items: center;
+                gap: 0;
+                max-width: 680px;
+                margin: 0 auto;
+            }
+            .org-mid-spine-col {
+                position: relative;
+                height: 100%;
+                min-height: 92px;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+            .org-mid-spine-col::before {
+                content: "";
+                position: absolute;
+                top: 0;
+                bottom: 0;
+                left: 50%;
+                width: 2px;
+                transform: translateX(-50%);
+                background-color: #475569;
+            }
+            .org-mid-spine-col::after {
+                content: "";
+                position: absolute;
+                top: 50%;
+                left: 0;
+                right: 0;
+                height: 2px;
+                transform: translateY(-50%);
+                background-color: #475569;
+            }
+            .dark .org-mid-spine-col::before,
+            .dark .org-mid-spine-col::after {
+                background-color: #94a3b8;
+            }
+            .org-seksi-grid {
+                position: relative;
+                display: grid;
+                grid-template-columns: repeat(var(--seksi-cols, 4), minmax(0, 1fr));
+                gap: 0.65rem;
+                padding-top: 1.15rem;
+            }
+            .org-seksi-grid::before {
+                content: "";
+                position: absolute;
+                top: 0;
+                left: 50%;
+                width: 2px;
+                height: 0.575rem;
+                transform: translateX(-50%);
+                background-color: #475569;
+            }
+            .org-seksi-grid.has-multiple::after {
+                content: "";
+                position: absolute;
+                top: 0.575rem;
+                left: calc(100% / (var(--seksi-cols, 4) * 2));
+                right: calc(100% / (var(--seksi-cols, 4) * 2));
+                height: 2px;
+                background-color: #475569;
+            }
+            .dark .org-seksi-grid::before,
+            .dark .org-seksi-grid.has-multiple::after {
+                background-color: #94a3b8;
+            }
+            .org-seksi-cell {
+                position: relative;
+                padding-top: 0.575rem;
+            }
+            .org-seksi-cell::before {
+                content: "";
+                position: absolute;
+                top: 0;
+                left: 50%;
+                width: 2px;
+                height: 0.575rem;
+                transform: translateX(-50%);
+                background-color: #475569;
+            }
+            .dark .org-seksi-cell::before {
+                background-color: #94a3b8;
+            }
+            #home-wilayah-map-canvas {
+                z-index: 1;
             }
         </style>
         <div class="home-landing-root bg-[#f6f3ec] dark:bg-stone-950 text-stone-800 dark:text-stone-100">
@@ -542,7 +910,7 @@ export function renderHome() {
                 </div>
             </div>
 
-            <!-- TENTANG KAMI, PENGURUS RT, STATISTIK WARGA & AGENDA / PENGUMUMAN WARGA -->
+            <!-- TENTANG KAMI, PENGURUS RT, STATISTIK WARGA, AGENDA / PENGUMUMAN WARGA & PETA WILAYAH -->
             <main class="max-w-6xl w-full mx-auto px-4 md:px-6 py-4 space-y-6 flex-1 min-h-0">
                 <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                     <section class="lg:col-span-4 space-y-2">
@@ -554,7 +922,7 @@ export function renderHome() {
 
                     <section class="lg:col-span-8 space-y-2.5">
                         <div class="flex items-center justify-between">
-                            <h2 class="text-base md:text-lg font-bold text-stone-900 dark:text-stone-100">Pengurus RT</h2>
+                            <h2 class="text-base md:text-lg font-bold text-stone-900 dark:text-stone-100">Susunan Organisasi Pengurus RT</h2>
                             <button
                                 type="button"
                                 id="home-lihat-semua-btn"
@@ -563,8 +931,8 @@ export function renderHome() {
                                 Lihat Semua →
                             </button>
                         </div>
-                        <div id="home-featured-grid" class="grid grid-cols-2 md:grid-cols-3 gap-3 transition-all duration-300">
-                            <div class="col-span-full text-xs text-stone-500 py-2">Memuat data pengurus RT...</div>
+                        <div id="home-featured-grid" class="transition-all duration-300">
+                            <div class="text-xs text-stone-500 py-2">Memuat susunan organisasi pengurus RT...</div>
                         </div>
                     </section>
                 </div>
@@ -700,6 +1068,41 @@ export function renderHome() {
                         <div class="col-span-full text-xs text-stone-500 py-2">Memuat agenda &amp; pengumuman warga...</div>
                     </div>
                 </section>
+
+                <!-- PETA WILAYAH (URUTAN TERAKHIR DI HALAMAN) -->
+                <section class="border-t border-stone-200 dark:border-stone-800 pt-5 space-y-3">
+                    <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-xl p-4 sm:p-5 space-y-4 shadow-sm">
+                        <div class="space-y-0.5">
+                            <h2 id="home-map-title" class="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-stone-100 tracking-tight">
+                                ${escapeHtml(initialMap.title)}
+                            </h2>
+                            <p id="home-map-subtitle" class="text-xs sm:text-sm text-slate-500 dark:text-stone-400">
+                                ${escapeHtml(initialMap.subtitle)}
+                            </p>
+                        </div>
+
+                        <div class="relative w-full h-[320px] sm:h-[380px] rounded-xl overflow-hidden border border-slate-200 dark:border-stone-800 bg-slate-100 dark:bg-stone-950">
+                            <div id="home-wilayah-map-canvas" class="w-full h-full"></div>
+                        </div>
+
+                        <div class="pt-1 flex items-start gap-3">
+                            <div class="w-7 h-7 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true">
+                                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                                    <circle cx="12" cy="10" r="3"></circle>
+                                </svg>
+                            </div>
+                            <div class="min-w-0">
+                                <div id="home-map-location-title" class="text-xs sm:text-sm font-bold text-slate-900 dark:text-stone-100">
+                                    ${escapeHtml(initialMap.locationTitle)}
+                                </div>
+                                <div id="home-map-location-address" class="text-xs text-slate-500 dark:text-stone-400 mt-0.5">
+                                    ${escapeHtml(initialMap.locationAddress)}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </main>
 
             <!-- MODAL DETAIL PENGURUS RT -->
@@ -831,6 +1234,8 @@ export function initHomeHandler() {
     let agendaItems = [];
     let isExpanded = false;
     let isAgendaExpanded = false;
+    let leafletMapInstance = null;
+    let leafletBoundaryLayer = null;
 
     dismissLoginOverlaySmoothly();
     syncKasLayananLinksInDom();
@@ -868,6 +1273,72 @@ export function initHomeHandler() {
     const perempuanBarEl = document.getElementById("stat-perempuan-bar");
     const kepalaKeluargaEl = document.getElementById("stat-kepala-keluarga");
     const usiaUnknownEl = document.getElementById("stat-usia-unknown");
+
+    async function renderWilayahMap(mapCfg) {
+        if (isDestroyed) return;
+        const cfg = mapCfg || DEFAULT_MAP_CONFIG;
+
+        const titleEl = document.getElementById("home-map-title");
+        const subtitleEl = document.getElementById("home-map-subtitle");
+        const locTitleEl = document.getElementById("home-map-location-title");
+        const locAddrEl = document.getElementById("home-map-location-address");
+        const mapCanvasEl = document.getElementById("home-wilayah-map-canvas");
+
+        if (titleEl) titleEl.textContent = cfg.title;
+        if (subtitleEl) subtitleEl.textContent = cfg.subtitle;
+        if (locTitleEl) locTitleEl.textContent = cfg.locationTitle;
+        if (locAddrEl) locAddrEl.textContent = cfg.locationAddress;
+
+        if (!mapCanvasEl) return;
+
+        try {
+            const L = await ensureLeafletLoaded();
+            if (isDestroyed || !mapCanvasEl.isConnected) return;
+
+            if (!leafletMapInstance) {
+                leafletMapInstance = L.map(mapCanvasEl, {
+                    scrollWheelZoom: false
+                }).setView(cfg.center, cfg.zoom);
+
+                L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                    maxZoom: 19,
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(leafletMapInstance);
+            } else {
+                leafletMapInstance.setView(cfg.center, cfg.zoom);
+            }
+
+            if (leafletBoundaryLayer) {
+                leafletMapInstance.removeLayer(leafletBoundaryLayer);
+                leafletBoundaryLayer = null;
+            }
+
+            if (Array.isArray(cfg.polygon) && cfg.polygon.length >= 3) {
+                leafletBoundaryLayer = L.polygon(cfg.polygon, {
+                    color: "#dc2626",
+                    weight: 2.5,
+                    dashArray: "7 6",
+                    fillColor: "#ef4444",
+                    fillOpacity: 0.12
+                }).addTo(leafletMapInstance);
+
+                const bounds = leafletBoundaryLayer.getBounds();
+                if (bounds && bounds.isValid()) {
+                    leafletMapInstance.fitBounds(bounds.pad(0.15));
+                }
+            }
+
+            setTimeout(() => {
+                if (!isDestroyed && leafletMapInstance) {
+                    leafletMapInstance.invalidateSize();
+                }
+            }, 150);
+        } catch (err) {
+            console.warn("Peta wilayah tidak dapat dimuat:", err?.message || err);
+        }
+    }
+
+    renderWilayahMap(normalizeMapConfig(activeProfile, null));
 
     function renderWargaStatistics(stats, sourceLabel = "") {
         if (isDestroyed) return;
@@ -946,46 +1417,140 @@ export function initHomeHandler() {
         agendaToggleBtn.setAttribute("aria-expanded", String(isAgendaExpanded));
     }
 
+    function groupByJabatan(items = [], fallbackRole = "Pengurus RT") {
+        const grouped = [];
+        const map = new Map();
+
+        items.forEach((p) => {
+            const roleLabel = String(p.jabatan || fallbackRole).trim() || fallbackRole;
+            const key = roleLabel.toLowerCase();
+            if (!map.has(key)) {
+                const entry = { role: roleLabel, members: [] };
+                map.set(key, entry);
+                grouped.push(entry);
+            }
+            map.get(key).members.push(p);
+        });
+
+        return grouped;
+    }
+
     function renderPengurusGrid() {
         if (!gridEl || isDestroyed) return;
 
         syncLihatSemuaButton();
 
         if (!pengurusItems.length) {
-            gridEl.innerHTML = `<div class="col-span-full text-xs text-stone-500 py-2">Belum ada data pengurus RT aktif.</div>`;
+            gridEl.innerHTML = `<div class="text-xs text-stone-500 py-2">Belum ada data pengurus RT aktif.</div>`;
             return;
         }
 
         const initialLimit = isMobileViewport() ? MOBILE_INITIAL_LIMIT : DESKTOP_INITIAL_LIMIT;
         const visibleItems = isExpanded ? pengurusItems : pengurusItems.slice(0, initialLimit);
 
-        gridEl.innerHTML = visibleItems.map((p) => {
-            const rawFoto = p.fotoProfil || p.foto || p.gambar || p.url || DEFAULT_IMG;
-            const fotoSrc = escapeHtml(isSafeImageSrc(rawFoto) ? rawFoto : DEFAULT_IMG);
-            const namaPengurus = escapeHtml(p.nama || "Pengurus RT");
-            const jabatanText = escapeHtml(p.jabatan || "Pengurus RT");
+        const ketuaList = visibleItems.filter((p) => getOrgRoleCategory(p.jabatan) === "ketua");
+        const penasehatList = visibleItems.filter((p) => getOrgRoleCategory(p.jabatan) === "penasehat");
+        const wakilKetuaList = visibleItems.filter((p) => getOrgRoleCategory(p.jabatan) === "wakil_ketua");
+        const sekretarisList = visibleItems.filter((p) => getOrgRoleCategory(p.jabatan) === "sekretaris");
+        const wakilSekretarisList = visibleItems.filter((p) => getOrgRoleCategory(p.jabatan) === "wakil_sekretaris");
+        const bendaharaList = visibleItems.filter((p) => getOrgRoleCategory(p.jabatan) === "bendahara");
+        const seksiList = visibleItems.filter((p) => getOrgRoleCategory(p.jabatan) === "seksi");
 
-            return `
-                <button
-                    type="button"
-                    data-paket-id="${escapeHtml(p.id)}"
-                    class="group text-left w-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 overflow-hidden hover:border-[#c87d32] transition flex flex-col cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#c87d32]"
-                >
-                    <div class="w-full h-36 sm:h-40 bg-stone-100 dark:bg-stone-800/70 p-2 flex items-center justify-center overflow-hidden border-b border-stone-100 dark:border-stone-800">
-                        <img
-                            src="${fotoSrc}"
-                            alt="${namaPengurus}"
-                            class="w-full h-full object-contain group-hover:scale-[1.03] transition duration-300"
-                            onerror="this.onerror=null;this.src='${DEFAULT_IMG}';"
-                        >
+        const ketuaGroups = groupByJabatan(ketuaList, "Ketua RT");
+        const penasehatGroups = groupByJabatan(penasehatList, "Penasehat");
+        const wakilKetuaGroups = groupByJabatan(wakilKetuaList, "Wakil Ketua RT");
+        const sekretarisGroups = groupByJabatan(sekretarisList, "Sekretaris RT");
+        const wakilSekretarisGroups = groupByJabatan(wakilSekretarisList, "Wakil Sekretaris RT");
+        const bendaharaGroups = groupByJabatan(bendaharaList, "Bendahara RT");
+        const seksiGroups = groupByJabatan(seksiList, "Seksi");
+
+        const hasTopRow = ketuaGroups.length > 0 || penasehatGroups.length > 0;
+        const hasLeftSec = sekretarisGroups.length > 0 || wakilSekretarisGroups.length > 0;
+        const hasRightFin = bendaharaGroups.length > 0;
+        const hasMidRow = hasLeftSec || hasRightFin || wakilKetuaGroups.length > 0;
+
+        let html = `<div class="org-chart-wrapper rounded-xl space-y-0">`;
+
+        // Baris 1: KETUA RT & PENASEHAT SEJAJAR
+        if (hasTopRow) {
+            const ketuaColHtml = ketuaGroups.length > 0
+                ? ketuaGroups.map((g) => buildOrgChartCardHtml(g.role, g.members, "ketua")).join("")
+                : "";
+            const penasehatColHtml = penasehatGroups.length > 0
+                ? penasehatGroups.map((g) => buildOrgChartCardHtml(g.role, g.members, "penasehat")).join("")
+                : "";
+
+            if (ketuaGroups.length > 0 && penasehatGroups.length > 0) {
+                html += `
+                    <div class="org-top-row">
+                        <div class="flex flex-col gap-2">${ketuaColHtml}</div>
+                        <div class="org-top-connector" aria-hidden="true"></div>
+                        <div class="flex flex-col gap-2">${penasehatColHtml}</div>
                     </div>
-                    <div class="p-2.5 flex-1 flex flex-col justify-center">
-                        <div class="text-xs font-bold text-stone-800 dark:text-stone-100 line-clamp-1">${namaPengurus}</div>
-                        <div class="text-[11px] text-stone-500 dark:text-stone-400 line-clamp-1 mt-0.5">${jabatanText}</div>
+                `;
+            } else {
+                html += `
+                    <div class="flex flex-wrap justify-center gap-3">
+                        ${ketuaColHtml}${penasehatColHtml}
                     </div>
-                </button>
+                `;
+            }
+        }
+
+        // Baris 2: WAKIL KETUA RT (jika ada)
+        if (wakilKetuaGroups.length > 0) {
+            html += `
+                ${hasTopRow ? `<div class="org-line-v"></div>` : ""}
+                <div class="flex flex-wrap justify-center gap-3">
+                    ${wakilKetuaGroups.map((g) => buildOrgChartCardHtml(g.role, g.members, "wakil_ketua")).join("")}
+                </div>
             `;
-        }).join("");
+        }
+
+        // Baris 3: SEKRETARIS RT & WAKIL SEKRETARIS RT (kiri) + BENDAHARA RT (kanan) dengan garis cabang tengah
+        if (hasMidRow) {
+            html += `<div class="org-line-v"></div>`;
+
+            const leftHtml = `
+                <div class="flex flex-col">
+                    ${sekretarisGroups.map((g) => buildOrgChartCardHtml(g.role, g.members, "sekretaris")).join("")}
+                    ${wakilSekretarisGroups.map((g) => buildOrgChartCardHtml(g.role, g.members, "wakil_sekretaris")).join("")}
+                </div>
+            `;
+
+            const rightHtml = `
+                <div class="flex flex-col">
+                    ${bendaharaGroups.map((g) => buildOrgChartCardHtml(g.role, g.members, "bendahara")).join("")}
+                </div>
+            `;
+
+            html += `
+                <div class="org-mid-row">
+                    <div>${hasLeftSec ? leftHtml : ""}</div>
+                    <div class="org-mid-spine-col" aria-hidden="true"></div>
+                    <div>${hasRightFin ? rightHtml : ""}</div>
+                </div>
+            `;
+        }
+
+        // Baris 4: SEKSI-SEKSI
+        if (seksiGroups.length > 0) {
+            const maxCols = isMobileViewport() ? 2 : 4;
+            const colsCount = Math.min(seksiGroups.length, maxCols);
+            const multiClass = seksiGroups.length > 1 ? "has-multiple" : "";
+            html += `
+                <div class="org-seksi-grid ${multiClass}" style="--seksi-cols: ${colsCount};">
+                    ${seksiGroups.map((g) => `
+                        <div class="org-seksi-cell">
+                            ${buildOrgChartCardHtml(g.role, g.members, "seksi")}
+                        </div>
+                    `).join("")}
+                </div>
+            `;
+        }
+
+        html += `</div>`;
+        gridEl.innerHTML = html;
     }
 
     function renderAgendaList() {
@@ -1190,6 +1755,9 @@ export function initHomeHandler() {
                 syncLihatSemuaButton();
             }
         }
+        if (leafletMapInstance) {
+            leafletMapInstance.invalidateSize();
+        }
     };
 
     const handleModalBackdropClick = (e) => {
@@ -1250,7 +1818,8 @@ export function initHomeHandler() {
             wargaResult,
             dataWargaResult,
             kkResult,
-            statsDocResult
+            statsDocResult,
+            mapDocResult
         ] = await Promise.allSettled([
             getDoc(doc(db, "pengaturan", "profil_perusahaan")),
             getDocs(collection(db, "pengurus_rt")),
@@ -1259,14 +1828,17 @@ export function initHomeHandler() {
             getDocs(collection(db, "warga")),
             getDocs(collection(db, "data_warga")),
             getDocs(collection(db, "kk")),
-            getDoc(doc(db, "pengaturan", "statistik_warga"))
+            getDoc(doc(db, "pengaturan", "statistik_warga")),
+            getDoc(doc(db, "pengaturan", "peta_wilayah"))
         ]);
 
         if (isDestroyed) return;
 
+        let rawProfForMap = {};
         let profileRunningText = "";
         if (profResult.status === "fulfilled" && profResult.value.exists()) {
             const rawProf = profResult.value.data() || {};
+            rawProfForMap = rawProf;
             profileRunningText = String(rawProf.runningText || rawProf.running_text || rawProf.pengumuman || "").trim();
             const normalized = normalizeProfileData(rawProf);
             activeProfile = normalized;
@@ -1275,6 +1847,11 @@ export function initHomeHandler() {
         } else if (profResult.status === "rejected") {
             console.warn("Profil RTKu Digital belum dapat dimuat:", profResult.reason?.message || profResult.reason);
         }
+
+        const mapDocData = mapDocResult.status === "fulfilled" && mapDocResult.value.exists()
+            ? mapDocResult.value.data()
+            : null;
+        renderWilayahMap(normalizeMapConfig(rawProfForMap, mapDocData));
 
         const wargaDocs = [];
         if (wargaResult.status === "fulfilled") {
@@ -1340,12 +1917,9 @@ export function initHomeHandler() {
                     }
                 });
                 daftarPengurus.sort((a, b) => {
-                    const jabA = String(a.jabatan || "").toLowerCase();
-                    const jabB = String(b.jabatan || "").toLowerCase();
-                    const isKetuaA = jabA.includes("ketua rt") && !jabA.includes("wakil");
-                    const isKetuaB = jabB.includes("ketua rt") && !jabB.includes("wakil");
-                    if (isKetuaA && !isKetuaB) return -1;
-                    if (!isKetuaA && isKetuaB) return 1;
+                    const orderA = getOrgSortOrder(a.jabatan);
+                    const orderB = getOrgSortOrder(b.jabatan);
+                    if (orderA !== orderB) return orderA - orderB;
                     return String(a.nama || "").localeCompare(String(b.nama || ""), "id");
                 });
                 pengurusItems = daftarPengurus;
@@ -1353,7 +1927,7 @@ export function initHomeHandler() {
                 renderPengurusGrid();
             } else {
                 console.warn("Data pengurus RT belum dapat dimuat:", pengurusResult.reason?.message || pengurusResult.reason);
-                gridEl.innerHTML = `<div class="col-span-full text-xs text-stone-500 py-2">Data pengurus RT belum tersedia.</div>`;
+                gridEl.innerHTML = `<div class="text-xs text-stone-500 py-2">Data pengurus RT belum tersedia.</div>`;
             }
         }
 
@@ -1422,6 +1996,11 @@ export function initHomeHandler() {
         agendaModalEl?.removeEventListener("click", handleModalBackdropClick);
         document.removeEventListener("keydown", handleKeyDown);
         unsubscribeAuth?.();
+        if (leafletMapInstance) {
+            leafletMapInstance.remove();
+            leafletMapInstance = null;
+            leafletBoundaryLayer = null;
+        }
     };
 }
 
